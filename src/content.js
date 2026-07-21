@@ -23,19 +23,23 @@
   const JSON_ID = "media-scorecard-json";
 
   // Inject a tiny stylesheet into the scorecard's shadow root
-  // (where the badge lives) that hides the column only when
-  // we explicitly opt in via [data-rk-state="hidden"]. This
-  // keeps the inline flex layout from buildColumn untouched.
-  // Light-DOM stylesheets can't cross shadow boundaries, so
-  // the stylesheet must live in the same shadow root as the
-  // badge.
+  // (where the badge lives). It styles the empty/no-data
+  // state so the muted indicator is visually distinct from
+  // the live numbers. Light-DOM stylesheets can't cross
+  // shadow boundaries, so the stylesheet must live in the
+  // same shadow root as the badge.
   function injectStateStylesheet(shadowRoot) {
     if (!shadowRoot) return;
     if (shadowRoot.querySelector("#rotten-ketchup-styles")) return;
     const style = document.createElement("style");
     style.id = "rotten-ketchup-styles";
     style.textContent =
-      "." + COLUMN_CLASS + '[data-rk-state="hidden"]{display:none!important;}';
+      "." +
+      COLUMN_CLASS +
+      '[data-rk-state="empty"] [data-rk-role="value"]{color:#888!important;}' +
+      "." +
+      COLUMN_CLASS +
+      '[data-rk-state="empty"] [data-rk-role="reviews"]{color:#888!important;font-style:italic;cursor:default;pointer-events:none;}';
     shadowRoot.appendChild(style);
   }
 
@@ -260,11 +264,12 @@
   }
 
   // Bucket 3: apply parsed Pull data to an already-built badge.
-  // If `pull.hasPullData === false`, hide the badge entirely.
-  // If `pull` is null, leave the placeholder text in place.
-  // We toggle visibility via a `data-rk-state` attribute + a
-  // tiny stylesheet so the inline flex layout from buildColumn
-  // is never disturbed.
+  // Bucket 4: when `pull.hasPullData === false`, render a
+  // muted "no independent votes" indicator instead of hiding
+  // the column, so users understand why the third column is
+  // empty. Visibility is toggled via a `data-rk-state`
+  // attribute + a tiny stylesheet so the inline flex layout
+  // from buildColumn is never disturbed.
   function applyDataToBadge(col, pull, counts, data) {
     if (!col) return;
     const value = col.querySelector('[data-rk-role="value"]');
@@ -273,14 +278,23 @@
       // No data yet: keep the placeholder dashes so the column
       // is still visible during early paint.
       if (value) value.textContent = "—";
-      if (reviews) reviews.textContent = "—";
+      if (reviews) {
+        reviews.textContent = "—";
+        reviews.removeAttribute("href");
+      }
       col.setAttribute("data-rk-state", "loading");
       return;
     }
     if (!pull.hasPullData) {
-      // Per the agreed hide-when-zero rule: if there are no
-      // unverified votes, the badge stays out of the way.
-      col.setAttribute("data-rk-state", "hidden");
+      // Bucket 4: render an empty-state placeholder instead of
+      // hiding the column. Users get an explanation of why the
+      // third column is empty.
+      if (value) value.textContent = "—";
+      if (reviews) {
+        reviews.textContent = "No independent votes yet";
+        reviews.removeAttribute("href");
+      }
+      col.setAttribute("data-rk-state", "empty");
       return;
     }
     col.setAttribute("data-rk-state", "ready");
@@ -375,7 +389,52 @@
     return true;
   }
 
-  if (!place()) {
+  // ---- Bucket 4: SPA-safe re-scan on client-side navigation ----
+  // RT is a single-page app: navigating between movie pages
+  // changes the URL via history.pushState without a full page
+  // reload, so the old <media-scorecard> is torn down and a
+  // new one is created. We need to reset our cached state and
+  // re-run place()/runParser() on each navigation, otherwise
+  // the new scorecard never gets a badge.
+
+  function resetForNavigation() {
+    // Drop cached data + badge reference so place()/runParser()
+    // treat this as a fresh page.
+    if (window.__rottenKetchup) {
+      // Detach the old badge from its parent (light or shadow
+      // DOM) if it's still attached. The old shadow root may
+      // be gone with the old scorecard, so guard against that.
+      const oldBadge = window.__rottenKetchup.badge;
+      if (oldBadge && oldBadge.parentNode) {
+        try {
+          oldBadge.parentNode.removeChild(oldBadge);
+        } catch (_) {
+          /* parent gone (old scorecard torn down), fine */
+        }
+      }
+    }
+    window.__rottenKetchup = null;
+    // Remove our markers from any remaining scorecards so
+    // findAudienceScorecard can pick the new one and place()
+    // can re-inject.
+    try {
+      document
+        .querySelectorAll(
+          SCORECARD + "[data-rk-scored], " + SCORECARD + "[data-rk-injected]",
+        )
+        .forEach((el) => {
+          el.removeAttribute("data-rk-scored");
+          el.removeAttribute("data-rk-injected");
+        });
+    } catch (_) {
+      /* document torn down, ignore */
+    }
+  }
+
+  function startScorecardObserver() {
+    if (document.getElementById(SCORECARD) || window.__rottenKetchup) {
+      return;
+    }
     const obs = new MutationObserver(() => {
       if (place()) obs.disconnect();
     });
@@ -383,11 +442,11 @@
     setTimeout(() => obs.disconnect(), 30000);
   }
 
-  // Bucket 2: parse + compute. Try immediately, then watch for
-  // the JSON script tag in case it lands after `document_idle`.
-  if (document.getElementById(JSON_ID)) {
-    runParser();
-  } else {
+  function startJsonObserver() {
+    if (document.getElementById(JSON_ID)) {
+      runParser();
+      return;
+    }
     const jsonObs = new MutationObserver(() => {
       if (document.getElementById(JSON_ID)) {
         runParser();
@@ -400,4 +459,34 @@
     });
     setTimeout(() => jsonObs.disconnect(), 30000);
   }
+
+  function scanCycle() {
+    resetForNavigation();
+    if (!place()) startScorecardObserver();
+    if (document.getElementById(JSON_ID)) {
+      runParser();
+    } else {
+      startJsonObserver();
+    }
+  }
+
+  // Patch history.pushState / replaceState so the same code
+  // path runs for SPA navigations.
+  (function patchHistory() {
+    const wrap = (orig) =>
+      function patched() {
+        const result = orig.apply(this, arguments);
+        // Defer until after the URL has actually changed and
+        // the new DOM is in flight.
+        setTimeout(scanCycle, 0);
+        return result;
+      };
+    history.pushState = wrap(history.pushState);
+    history.replaceState = wrap(history.replaceState);
+    window.addEventListener("popstate", scanCycle);
+    window.addEventListener("hashchange", scanCycle);
+  })();
+
+  // Initial scan.
+  scanCycle();
 })();
