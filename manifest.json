@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Rotten Ketchup",
+  "version": "0.1.0",
+  "description": "Adds an Independent Audience (Pull) score next to the Popcornmeter on Rotten Tomatoes movie pages.",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.rottentomatoes.com/m/*"
+      ],
+      "js": [
+        "src/content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/badge.png"
+      ],
+      "matches": [
+        "https://www.rottentomatoes.com/*"
+      ]
+    }
+  ]
+}
