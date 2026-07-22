@@ -256,6 +256,8 @@
 
     const reviews = document.createElement("a");
     reviews.setAttribute("data-rk-role", "reviews");
+    reviews.href =
+      "https://www.reddit.com/r/KotakuInAction/comments/1v1ow9s/rotten_tomatoes_says_the_odyssey_has_a_97/";
     reviews.target = "_blank";
     reviews.textContent = "—";
     reviews.style.cssText =
@@ -330,6 +332,8 @@
 
     const reviews = document.createElement("a");
     reviews.setAttribute("data-rk-role", "reviews");
+    reviews.href =
+      "https://www.reddit.com/r/KotakuInAction/comments/1v1ow9s/rotten_tomatoes_says_the_odyssey_has_a_97/";
     reviews.target = "_blank";
     reviews.textContent = "—";
     reviews.style.cssText =
@@ -372,7 +376,6 @@
       if (value) value.textContent = "—";
       if (reviews) {
         reviews.textContent = "—";
-        reviews.removeAttribute("href");
       }
       col.setAttribute("data-rk-state", "loading");
       return;
@@ -384,7 +387,12 @@
       if (value) value.textContent = "—";
       if (reviews) {
         reviews.textContent = "No independent votes yet";
-        reviews.removeAttribute("href");
+        if (reviews.href) {
+          // Strip the href so the "no votes" placeholder isn't
+          // a clickable dead link, but only if the link was
+          // already set.
+          reviews.removeAttribute("href");
+        }
       }
       col.setAttribute("data-rk-state", "empty");
       return;
@@ -393,12 +401,9 @@
     if (value) value.textContent = pull.displayPct + "%";
     if (reviews) {
       reviews.textContent = formatCount(pull.unverifiedTotal) + " Reviews";
-      // Link to the all-audience reviews page so readers can
-      // inspect the unverified pool directly.
-      const page = data && data.overlay && data.overlay.audienceAll;
-      if (page && page.reviewsPageUrl) {
-        reviews.href = new URL(page.reviewsPageUrl, location.origin).toString();
-      }
+      // The href is set at build time (Reddit attribution link
+      // in buildColumn / buildStickyColumn). Don't overwrite it
+      // here, otherwise the attribution is lost on every refresh.
     }
   }
 
