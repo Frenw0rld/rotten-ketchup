@@ -1,10 +1,4 @@
 // Rotten Ketchup - content script
-// Bucket 1: injection skeleton (test badge).
-// Bucket 2: parse #media-scorecard-json and compute the Pull
-//           score. Result is logged to the console and stashed
-//           on `window.__rottenKetchup` for the UI to pick up
-//           in Bucket 3.
-//
 // Strategy: <media-scorecard> has an open shadow root. Inside
 // the shadow, .scorecard-wrap > .score-wrap is a 2-column grid
 // (.critics-score-wrap | .audience-score-wrap). We append a
@@ -17,7 +11,7 @@
 // host (light DOM) if the shadow is closed or the wrap
 // elements aren't present.
 
-(function injectTestBadge() {
+(function rottenKetchup() {
   const SCORECARD = "media-scorecard";
   const COLUMN_CLASS = "rotten-ketchup-col";
   const JSON_ID = "media-scorecard-json";
@@ -39,11 +33,28 @@
       '[data-rk-state="empty"] [data-rk-role="value"]{color:#888!important;}' +
       "." +
       COLUMN_CLASS +
-      '[data-rk-state="empty"] [data-rk-role="reviews"]{color:#888!important;font-style:italic;cursor:default;pointer-events:none;}';
+      '[data-rk-state="empty"] [data-rk-role="reviews"]{color:#888!important;font-style:italic;cursor:default;pointer-events:none;}' +
+      // Sticky column: RT always darkens the background image
+      // when the sticky bar appears, so text is always white.
+      "." +
+      COLUMN_CLASS +
+      '-sticky [data-rk-role="value"]{color:#fff;}' +
+      "." +
+      COLUMN_CLASS +
+      '-sticky [data-rk-role="type"]{color:#fff;opacity:0.7;}' +
+      "." +
+      COLUMN_CLASS +
+      '-sticky [data-rk-role="reviews"]{color:#fff;}' +
+      "." +
+      COLUMN_CLASS +
+      '-sticky[data-rk-state="empty"] [data-rk-role="value"]{color:#fff;opacity:0.5;}' +
+      "." +
+      COLUMN_CLASS +
+      '-sticky[data-rk-state="empty"] [data-rk-role="reviews"]{color:#fff;opacity:0.5;font-style:italic;cursor:default;pointer-events:none;}';
     shadowRoot.appendChild(style);
   }
 
-  // ---- Bucket 2: parse + compute ----
+  // ---- Parse + compute ----
   function parseScorecardJson() {
     const el = document.getElementById(JSON_ID);
     if (!el) return null;
@@ -73,10 +84,6 @@
       allDislikes: Number(all.notLikedCount) || 0,
       verifiedLikes: Number(verified.likedCount) || 0,
       verifiedDislikes: Number(verified.notLikedCount) || 0,
-      allScore: all.score,
-      allScorePercent: all.scorePercent,
-      verifiedScore: verified.score,
-      verifiedScorePercent: verified.scorePercent,
     };
   }
 
@@ -84,7 +91,8 @@
   //   unverifiedLikes    = allLikes    - verifiedLikes
   //   unverifiedDislikes = allDislikes - verifiedDislikes
   //   pullPct            = unverifiedLikes / (unverifiedLikes + unverifiedDislikes) * 100
-  // Returns null if there are no unverified votes.
+  // Returns an object with hasPullData: false if there are no
+  // unverified votes.
   function computePull(counts) {
     if (!counts) return null;
     const unverifiedLikes = Math.max(0, counts.allLikes - counts.verifiedLikes);
@@ -121,12 +129,15 @@
     // querySelector can't reach it.
     const prevBadge =
       (window.__rottenKetchup && window.__rottenKetchup.badge) || null;
+    const prevSticky =
+      (window.__rottenKetchup && window.__rottenKetchup.stickyBadge) || null;
     if (!data) {
       console.warn("[RottenKetchup] #" + JSON_ID + " not found or empty");
       window.__rottenKetchup = {
         ok: false,
         reason: "no-json",
         badge: prevBadge,
+        stickyBadge: prevSticky,
       };
       return;
     }
@@ -141,11 +152,19 @@
         ok: false,
         reason: "no-counts",
         badge: prevBadge,
+        stickyBadge: prevSticky,
       };
       return;
     }
     const pull = computePull(counts);
-    const result = { ok: true, data, counts, pull, badge: prevBadge };
+    const result = {
+      ok: true,
+      data,
+      counts,
+      pull,
+      badge: prevBadge,
+      stickyBadge: prevSticky,
+    };
     window.__rottenKetchup = result;
     console.log("[RottenKetchup] audience counts:", {
       allLikes: counts.allLikes,
@@ -168,9 +187,12 @@
     if (result.badge) {
       applyDataToBadge(result.badge, pull, counts, data);
     }
+    if (result.stickyBadge) {
+      applyDataToBadge(result.stickyBadge, pull, counts, data);
+    }
   }
 
-  // ---- Bucket 1: badge injection (test data still hardcoded) ----
+  // ---- Badge injection ----
   function findAudienceScorecard() {
     return (
       document.querySelector(`${SCORECARD}[data-rk-scored="audience"]`) ||
@@ -263,8 +285,78 @@
     return Number(n || 0).toLocaleString("en-US");
   }
 
-  // Bucket 3: apply parsed Pull data to an already-built badge.
-  // Bucket 4: when `pull.hasPullData === false`, render a
+  // Build the compact column for the sticky/collapsed hero bar.
+  // Mirrors the structure of the existing .collapsed-scores-col
+  // audience column (icon + score / link / label stack) so it
+  // sits next to it natively.
+  function buildStickyColumn() {
+    const col = document.createElement("div");
+    col.className =
+      COLUMN_CLASS + " " + COLUMN_CLASS + "-sticky collapsed-scores-col";
+    col.setAttribute("data-rk", "sticky-column");
+    col.style.cssText =
+      "display:flex;flex-direction:row;align-items:center;gap:8px;margin-left:16px";
+
+    // Icon on the left, matching the size used by the existing
+    // .collapsed-audience-icon wrapper.
+    const iconWrap = document.createElement("div");
+    iconWrap.className = "collapsed-audience-icon";
+    iconWrap.style.cssText = "flex:0 0 auto;display:flex;align-self:start";
+
+    const img = document.createElement("img");
+    img.src =
+      (typeof chrome !== "undefined" &&
+        chrome.runtime &&
+        chrome.runtime.getURL &&
+        chrome.runtime.getURL("icons/icon48glow.png")) ||
+      "icons/icon48glow.png";
+    img.alt = "Rotten Ketchup";
+    img.style.cssText = "width:48px;height:48px;display:block";
+    iconWrap.appendChild(img);
+
+    // Stack: value / reviews / type. justify-content (not
+    // align-content) distributes the children on the main
+    // axis; align-content only applies when flex-wrap allows
+    // multi-line, which we don't.
+    const details = document.createElement("div");
+    details.className = "collapsed-score-details";
+    details.style.cssText =
+      "display:flex;flex-direction:column;justify-content:space-between;color:#fff;min-height:100%";
+
+    const value = document.createElement("div");
+    value.setAttribute("data-rk-role", "value");
+    value.textContent = "—";
+    value.style.cssText = "font-size:22px;font-weight:500";
+
+    const reviews = document.createElement("a");
+    reviews.setAttribute("data-rk-role", "reviews");
+    reviews.target = "_blank";
+    reviews.textContent = "—";
+    reviews.style.cssText =
+      "font-size:12px;font-weight:400;text-decoration:none;color:#70a5ff";
+
+    reviews.addEventListener("mouseenter", () => {
+      reviews.style.textDecoration = "underline #326AF6";
+    });
+    reviews.addEventListener("mouseleave", () => {
+      reviews.style.textDecoration = "none";
+    });
+
+    const type = document.createElement("div");
+    type.setAttribute("data-rk-role", "type");
+    type.textContent = "Censored";
+    type.style.cssText = "font-size:12px;letter-spacing:0.2px;color:#fff";
+
+    details.appendChild(value);
+    details.appendChild(reviews);
+    details.appendChild(type);
+
+    col.appendChild(iconWrap);
+    col.appendChild(details);
+    return col;
+  }
+
+  // When `pull.hasPullData === false`, render a
   // muted "no independent votes" indicator instead of hiding
   // the column, so users understand why the third column is
   // empty. Visibility is toggled via a `data-rk-state`
@@ -286,9 +378,9 @@
       return;
     }
     if (!pull.hasPullData) {
-      // Bucket 4: render an empty-state placeholder instead of
-      // hiding the column. Users get an explanation of why the
-      // third column is empty.
+      // Render an empty-state placeholder instead of hiding
+      // the column, so users understand why the third column
+      // is empty.
       if (value) value.textContent = "—";
       if (reviews) {
         reviews.textContent = "No independent votes yet";
@@ -338,6 +430,7 @@
     }
 
     let injected = false;
+    let shadowRoot = null;
 
     // Preferred: insert as a sibling of .audience-score-wrap
     // *before* .description-wrap inside the open shadow root,
@@ -348,13 +441,13 @@
     // its own row) so the three score columns truly share
     // one row, regardless of the original 2-col layout.
     try {
-      const root = card.shadowRoot;
-      if (root) {
-        // Inject the hide-when-zero stylesheet into this
-        // shadow root so the data-rk-state="hidden" rule can
+      shadowRoot = card.shadowRoot;
+      if (shadowRoot) {
+        // Inject the empty-state stylesheet into this
+        // shadow root so the data-rk-state rules can
         // actually reach the badge.
-        injectStateStylesheet(root);
-        const scoreWrap = root.querySelector(".score-wrap");
+        injectStateStylesheet(shadowRoot);
+        const scoreWrap = shadowRoot.querySelector(".score-wrap");
         if (scoreWrap) {
           const descriptionWrap = scoreWrap.querySelector(".description-wrap");
 
@@ -385,11 +478,100 @@
     // Fallback: append to the scorecard host (light DOM).
     if (!injected) card.appendChild(col);
 
+    // Also build + inject the compact column for the sticky
+    // .media-hero.collapsed bar (visible while scrolling). It
+    // mirrors the existing .collapsed-scores-col audience
+    // column structure. The sticky row lives in a *different*
+    // element's shadow root (not <media-scorecard>), so we
+    // have to search the document for the host.
+    function findStickyRow() {
+      // Cache the found host on window so we don't re-scan.
+      const cached =
+        window.__rottenKetchup && window.__rottenKetchup.stickyHost;
+      if (cached && cached.isConnected) {
+        try {
+          const root = cached.shadowRoot;
+          if (root) {
+            const row = root.querySelector(".collapsed-scores-row");
+            if (row) return row;
+          }
+        } catch (_) {
+          /* host removed, fall through */
+        }
+      }
+      // Scan the document for any element with an open shadow
+      // root that contains .collapsed-scores-row.
+      const all = document.querySelectorAll("*");
+      for (let i = 0; i < all.length; i++) {
+        const el = all[i];
+        if (!el || !el.shadowRoot) continue;
+        try {
+          const row = el.shadowRoot.querySelector(".collapsed-scores-row");
+          if (row) {
+            window.__rottenKetchup = window.__rottenKetchup || {};
+            window.__rottenKetchup.stickyHost = el;
+            return row;
+          }
+        } catch (_) {
+          /* closed shadow, skip */
+        }
+      }
+      return null;
+    }
+
+    function injectStickyColumn() {
+      // Idempotency: don't inject twice.
+      if (window.__rottenKetchup && window.__rottenKetchup.stickyBadge) {
+        return true;
+      }
+      const stickyRow = findStickyRow();
+      if (!stickyRow) return false;
+      const stickyCol = buildStickyColumn();
+      stickyRow.appendChild(stickyCol);
+      window.__rottenKetchup = window.__rottenKetchup || {};
+      window.__rottenKetchup.stickyBadge = stickyCol;
+      const cur = window.__rottenKetchup;
+      if (cur && cur.ok) {
+        applyDataToBadge(stickyCol, cur.pull, cur.counts, cur.data);
+      } else {
+        applyDataToBadge(stickyCol, null, null, null);
+      }
+      return true;
+    }
+
+    let stickyInjected = false;
+    try {
+      stickyInjected = injectStickyColumn();
+    } catch (_) {
+      /* scan failed, skip */
+    }
+
+    // .media-hero.collapsed is only present in the DOM after
+    // the user scrolls. Watch the document so we catch the
+    // hero element being added dynamically (and any new shadow
+    // hosts being attached).
+    if (!stickyInjected) {
+      try {
+        const stickyObs = new MutationObserver(() => {
+          if (injectStickyColumn()) stickyObs.disconnect();
+        });
+        stickyObs.observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+        });
+        window.__rottenKetchup = window.__rottenKetchup || {};
+        window.__rottenKetchup.stickyObserver = stickyObs;
+        setTimeout(() => stickyObs.disconnect(), 60000);
+      } catch (_) {
+        /* observer setup failed, ignore */
+      }
+    }
+
     card.setAttribute("data-rk-injected", "true");
     return true;
   }
 
-  // ---- Bucket 4: SPA-safe re-scan on client-side navigation ----
+  // ---- SPA-safe re-scan on client-side navigation ----
   // RT is a single-page app: navigating between movie pages
   // changes the URL via history.pushState without a full page
   // reload, so the old <media-scorecard> is torn down and a
@@ -410,6 +592,25 @@
           oldBadge.parentNode.removeChild(oldBadge);
         } catch (_) {
           /* parent gone (old scorecard torn down), fine */
+        }
+      }
+      // Same for the sticky/collapsed hero column.
+      const oldSticky = window.__rottenKetchup.stickyBadge;
+      if (oldSticky && oldSticky.parentNode) {
+        try {
+          oldSticky.parentNode.removeChild(oldSticky);
+        } catch (_) {
+          /* parent gone, fine */
+        }
+      }
+      // Disconnect the sticky-row observer so it doesn't fire
+      // after the scorecard is gone.
+      const oldStickyObs = window.__rottenKetchup.stickyObserver;
+      if (oldStickyObs) {
+        try {
+          oldStickyObs.disconnect();
+        } catch (_) {
+          /* already gone, fine */
         }
       }
     }
