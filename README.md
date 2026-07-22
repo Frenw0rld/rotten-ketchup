@@ -1,6 +1,6 @@
 # Rotten Ketchup
 
-A browser extension that adds an **Censored** ("Pull") score next to the Popcornmeter on Rotten Tomatoes movie pages, so the verified-ticket "push" bias behind the displayed score becomes visible.
+A browser extension that adds a **Censored** ("Pull") score next to the Popcornmeter on Rotten Tomatoes movie pages, so the verified-ticket "push" bias behind the displayed score becomes visible.
 
 As u/RoryTate discovered [here](https://www.reddit.com/r/KotakuInAction/comments/1v1ow9s/rotten_tomatoes_says_the_odyssey_has_a_97/), Rotten Tomatoes' Popcornmeter is sold as the audience score, but most of it is made up of "verified" ticket-buying votes that the site heavily weights and labels prominently. Rotten Ketchup adds a third column to the movie scorecard: The Censored score, computed from the unverified (non-ticket) votes that RT's verified-ticket scoring suppresses.
 
