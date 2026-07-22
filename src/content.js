@@ -211,8 +211,8 @@
       (typeof chrome !== "undefined" &&
         chrome.runtime &&
         chrome.runtime.getURL &&
-        chrome.runtime.getURL("src/badge.png")) ||
-      "src/badge.png";
+        chrome.runtime.getURL("icons/icon48.png")) ||
+      "icons/icon48.png";
     img.alt = "Rotten Ketchup";
     img.style.cssText =
       "width:40px;height:40px;display:block;flex:0 0 auto;align-self:start";
@@ -432,7 +432,10 @@
   }
 
   function startScorecardObserver() {
-    if (document.getElementById(SCORECARD) || window.__rottenKetchup) {
+    if (
+      document.querySelector(SCORECARD) ||
+      (window.__rottenKetchup && window.__rottenKetchup.badge)
+    ) {
       return;
     }
     const obs = new MutationObserver(() => {

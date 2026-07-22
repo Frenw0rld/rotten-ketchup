@@ -1,27 +1,39 @@
 {
   "manifest_version": 3,
   "name": "Rotten Ketchup",
-  "version": "0.1.0",
-  "description": "Adds an Independent Audience (Pull) score next to the Popcornmeter on Rotten Tomatoes movie pages.",
+  "version": "1.0.2",
+  "description": "Adds a Censored (Pull) score next to the Popcornmeter on Rotten Tomatoes movie pages.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
   "content_scripts": [
     {
-      "matches": [
-        "https://www.rottentomatoes.com/m/*"
-      ],
-      "js": [
-        "src/content.js"
-      ],
+      "matches": ["https://www.rottentomatoes.com/m/*"],
+      "js": ["src/content.js"],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": [
-        "src/badge.png"
-      ],
-      "matches": [
-        "https://www.rottentomatoes.com/*"
-      ]
+      "resources": ["icons/icon48.png"],
+      "matches": ["https://www.rottentomatoes.com/*"]
     }
-  ]
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "@rotten-ketchup",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
 }
