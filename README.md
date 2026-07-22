@@ -12,7 +12,7 @@ Rotten Ketchup is not listed on the Chrome Web Store. It is available for Firefo
 
 Install from the official Firefox Add-ons listing:
 
-[![Firefox Add-ons](https://img.shields.io/badge/Firefox%20Add--ons-Install-orange?logo=firefoxbrowser)](<[YOUR_AMO_URL](https://addons.mozilla.org/en-US/firefox/addon/rotten-ketchup/)>)
+[![Firefox Add-ons](https://img.shields.io/badge/Firefox%20Add--ons-Install-orange?logo=firefoxbrowser)](https://addons.mozilla.org/en-US/firefox/addon/rotten-ketchup/)
 
 Click "Add to Firefox" on the listing and confirm the permission prompt. The extension will start working immediately on any Rotten Tomatoes movie page.
 
