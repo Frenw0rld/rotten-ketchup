@@ -1,6 +1,8 @@
 # Rotten Ketchup
 
-A browser extension that adds a **Censored** score next to the Popcornmeter on Rotten Tomatoes movie pages, so the verified-ticket "push" bias behind the displayed score becomes visible.
+A browser extension that adds a **Censored** score next to the Popcornmeter on Rotten Tomatoes movie pages, so the verified-ticket bias behind the displayed score becomes visible.
+
+![Rotten Ketchup browser extension screenshot](docs/screenshot.png)
 
 As u/RoryTate discovered [here](https://www.reddit.com/r/KotakuInAction/comments/1v1ow9s/rotten_tomatoes_says_the_odyssey_has_a_97/), Rotten Tomatoes' Popcornmeter is sold as the audience score, but most of it is made up of "verified" ticket-buying votes that the site heavily weights and labels prominently. Rotten Ketchup adds a third column to the movie scorecard: The Censored score, computed from the unverified (non-ticket) votes that RT's verified-ticket scoring suppresses.
 
@@ -60,18 +62,6 @@ Use this only if the AMO listing is unavailable. This loads the extension as a t
 4. Open a Rotten Tomatoes movie page. The third column should appear.
 
 You will need to repeat these steps after every Firefox restart until the AMO listing is available. Requires Firefox 109 or newer.
-
-## What you should see
-
-![Rotten Ketchup browser extension screenshot](docs/screenshot.png)
-
-On any RT movie page, the scorecard now has three columns in its top row:
-
-1. **Tomatometer** (critics)
-2. **Popcornmeter** (verified-audience)
-3. **Censored** (this extension, computed from unverified votes)
-
-If a movie has no unverified votes yet, the third column shows `—` / `No independent votes yet`.
 
 ## Privacy
 
