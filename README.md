@@ -50,7 +50,7 @@ These browsers do not have a store listing for Rotten Ketchup, so the extension 
 
 **To uninstall:** go to `chrome://extensions`, click **Remove** on the Rotten Ketchup card, and confirm.
 
-### Manual install in Firefox (fallback)
+### Manual install in Firefox
 
 Use this only if the AMO listing is unavailable. This loads the extension as a temporary add-on that Firefox will remove when it restarts.
 

@@ -16,6 +16,55 @@
   const COLUMN_CLASS = "rotten-ketchup-col";
   const JSON_ID = "media-scorecard-json";
 
+  // Exact class names RT uses today, in priority order. If an
+  // exact match misses (RT renamed classes), findInShadow()
+  // falls back to a substring match so the extension keeps
+  // working and the debug log surfaces the drift.
+  const SHADOW_SELECTORS = {
+    scoreWrap:        ['.score-wrap',        '[class*="score-wrap"]'],
+    descriptionWrap:  ['.description-wrap',  '[class*="description-wrap"]'],
+    collapsedRow:     ['.collapsed-scores-row', '[class*="collapsed-scores-row"]'],
+  };
+
+  // Try each selector in `candidates` in order. Returns the
+  // first match, or null. Logs via debug() which selector
+  // actually hit so DOM drift is visible when rk-debug is on.
+  function findInShadow(root, candidates) {
+    if (!root) return null;
+    for (let i = 0; i < candidates.length; i++) {
+      const hit = root.querySelector(candidates[i]);
+      if (hit) {
+        debug("findInShadow hit", candidates[i]);
+        return hit;
+      }
+    }
+    debug("findInShadow missed all candidates", candidates);
+    return null;
+  }
+
+  // Opt-in debug logging. Activated by either localStorage
+  // ('rk-debug' === '1') or URL hash containing 'rk-debug'.
+  // Off by default => zero user impact.
+  function isDebug() {
+    try {
+      return (
+        localStorage.getItem("rk-debug") === "1" ||
+        (typeof location !== "undefined" &&
+          (location.hash || "").indexOf("rk-debug") !== -1)
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+  function debug(msg, ...args) {
+    if (!isDebug()) return;
+    try {
+      console.warn("[RottenKetchup]", msg, ...args);
+    } catch (_) {
+      /* console gone, ignore */
+    }
+  }
+
   // Inject a tiny stylesheet into the scorecard's shadow root
   // (where the badge lives). It styles the empty/no-data
   // state so the muted indicator is visually distinct from
@@ -74,7 +123,7 @@
   //   overlay.audienceVerified = verified-audience (ticket purchasers)
   // Both have `likedCount` and `notLikedCount`.
   function readAudienceCounts(data) {
-    const overlay = data && data.overlay;
+    const overlay = data?.overlay;
     if (!overlay) return null;
     const all = overlay.audienceAll;
     const verified = overlay.audienceVerified;
@@ -124,21 +173,9 @@
 
   function runParser() {
     const data = parseScorecardJson();
-    // Preserve the badge reference stashed by place(); it lives
-    // inside the scorecard's shadow root, so a light-DOM
-    // querySelector can't reach it.
-    const prevBadge =
-      (window.__rottenKetchup && window.__rottenKetchup.badge) || null;
-    const prevSticky =
-      (window.__rottenKetchup && window.__rottenKetchup.stickyBadge) || null;
     if (!data) {
-      console.warn("[RottenKetchup] #" + JSON_ID + " not found or empty");
-      window.__rottenKetchup = {
-        ok: false,
-        reason: "no-json",
-        badge: prevBadge,
-        stickyBadge: prevSticky,
-      };
+      console.warn(`[RottenKetchup] #${JSON_ID} not found or empty`);
+      window.__rottenKetchup = { ok: false, reason: "no-json" };
       return;
     }
     const counts = readAudienceCounts(data);
@@ -148,48 +185,23 @@
           "available keys:",
         Object.keys(data),
       );
-      window.__rottenKetchup = {
-        ok: false,
-        reason: "no-counts",
-        badge: prevBadge,
-        stickyBadge: prevSticky,
-      };
+      window.__rottenKetchup = { ok: false, reason: "no-counts" };
       return;
     }
     const pull = computePull(counts);
-    const result = {
-      ok: true,
-      data,
-      counts,
-      pull,
-      badge: prevBadge,
-      stickyBadge: prevSticky,
-    };
-    window.__rottenKetchup = result;
-    console.log("[RottenKetchup] audience counts:", {
-      allLikes: counts.allLikes,
-      allDislikes: counts.allDislikes,
-      verifiedLikes: counts.verifiedLikes,
-      verifiedDislikes: counts.verifiedDislikes,
-      unverifiedLikes: pull.unverifiedLikes,
-      unverifiedDislikes: pull.unverifiedDislikes,
-      unverifiedTotal: pull.unverifiedTotal,
+    window.__rottenKetchup = { ok: true, data, counts, pull };
+    debug("parser ok", {
       pullPct: pull.pullPct,
-      displayPct: pull.displayPct,
-      hasPullData: pull.hasPullData,
+      unverifiedTotal: pull.unverifiedTotal,
     });
 
-    // If the badge is already in the DOM, refresh it now. The
-    // badge lives inside the scorecard's shadow root, so a
-    // light-DOM querySelector can't find it; we look it up via
-    // the reference stashed on window.__rottenKetchup.badge
-    // (set by place()) instead.
-    if (result.badge) {
-      applyDataToBadge(result.badge, pull, counts, data);
-    }
-    if (result.stickyBadge) {
-      applyDataToBadge(result.stickyBadge, pull, counts, data);
-    }
+    // Refresh the badge in place if it was already injected.
+    // The badge lives inside the scorecard's shadow root, so
+    // a light-DOM querySelector can't find it; the references
+    // are stashed on window.__rottenKetchup by place() instead.
+    const live = window.__rottenKetchup;
+    if (live?.badge) applyDataToBadge(live.badge, pull, counts);
+    if (live?.stickyBadge) applyDataToBadge(live.stickyBadge, pull, counts);
   }
 
   // ---- Badge injection ----
@@ -218,7 +230,6 @@
       "align-items:center",
       "justify-content:flex-start",
       "gap:10px",
-      "background:#F3F3F3",
       "color:#222",
       "min-width:120px",
       "box-sizing:border-box",
@@ -290,11 +301,16 @@
   // Build the compact column for the sticky/collapsed hero bar.
   // Mirrors the structure of the existing .collapsed-scores-col
   // audience column (icon + score / link / label stack) so it
-  // sits next to it natively.
+  // sits next to it natively. The duplication with buildColumn
+  // is intentional: the two variants differ in icon path, hover
+  // handlers, layout direction, and inline styling. Consolidating
+  // them behind a shared factory would add abstraction for only
+  // two call sites, which AGENTS.md (simplicity-first) explicitly
+  // counsels against.
   function buildStickyColumn() {
     const col = document.createElement("div");
     col.className =
-      COLUMN_CLASS + " " + COLUMN_CLASS + "-sticky collapsed-scores-col";
+      `${COLUMN_CLASS} ${COLUMN_CLASS}-sticky collapsed-scores-col`;
     col.setAttribute("data-rk", "sticky-column");
     col.style.cssText =
       "display:flex;flex-direction:row;align-items:center;gap:8px;margin-left:16px";
@@ -366,7 +382,7 @@
   // empty. Visibility is toggled via a `data-rk-state`
   // attribute + a tiny stylesheet so the inline flex layout
   // from buildColumn is never disturbed.
-  function applyDataToBadge(col, pull, counts, data) {
+  function applyDataToBadge(col, pull, counts) {
     if (!col) return;
     const value = col.querySelector('[data-rk-role="value"]');
     const reviews = col.querySelector('[data-rk-role="reviews"]');
@@ -398,9 +414,9 @@
       return;
     }
     col.setAttribute("data-rk-state", "ready");
-    if (value) value.textContent = pull.displayPct + "%";
+    if (value) value.textContent = `${pull.displayPct}%`;
     if (reviews) {
-      reviews.textContent = formatCount(pull.unverifiedTotal) + " Reviews";
+      reviews.textContent = `${formatCount(pull.unverifiedTotal)} Reviews`;
       // The href is set at build time (Reddit attribution link
       // in buildColumn / buildStickyColumn). Don't overwrite it
       // here, otherwise the attribution is lost on every refresh.
@@ -412,7 +428,7 @@
     // a plain light-DOM querySelector won't find it. We use
     // the stashed reference on window.__rottenKetchup.badge
     // (set below) as the idempotency marker.
-    if (window.__rottenKetchup && window.__rottenKetchup.badge) return true;
+    if (window.__rottenKetchup?.badge) return true;
     const card = findAudienceScorecard();
     if (!card) return false;
     card.setAttribute("data-rk-scored", "audience");
@@ -428,10 +444,10 @@
     // Apply whatever data is already on window.__rottenKetchup
     // (in case the parser ran before the scorecard was found).
     const existing = window.__rottenKetchup;
-    if (existing && existing.ok) {
-      applyDataToBadge(col, existing.pull, existing.counts, existing.data);
+    if (existing?.ok) {
+      applyDataToBadge(col, existing.pull, existing.counts);
     } else {
-      applyDataToBadge(col, null, null, null);
+      applyDataToBadge(col, null, null);
     }
 
     let injected = false;
@@ -452,9 +468,9 @@
         // shadow root so the data-rk-state rules can
         // actually reach the badge.
         injectStateStylesheet(shadowRoot);
-        const scoreWrap = shadowRoot.querySelector(".score-wrap");
+        const scoreWrap = findInShadow(shadowRoot, SHADOW_SELECTORS.scoreWrap);
         if (scoreWrap) {
-          const descriptionWrap = scoreWrap.querySelector(".description-wrap");
+          const descriptionWrap = findInShadow(scoreWrap, SHADOW_SELECTORS.descriptionWrap);
 
           // Promote .score-wrap to a 3-column grid so all
           // three score cells (critics / audience / us) share
@@ -476,8 +492,8 @@
           injected = true;
         }
       }
-    } catch (_) {
-      /* shadow closed, fall through */
+    } catch (e) {
+      debug("scorecard shadow injection failed", e);
     }
 
     // Fallback: append to the scorecard host (light DOM).
@@ -487,37 +503,56 @@
     // .media-hero.collapsed bar (visible while scrolling). It
     // mirrors the existing .collapsed-scores-col audience
     // column structure. The sticky row lives in a *different*
-    // element's shadow root (not <media-scorecard>), so we
-    // have to search the document for the host.
+    // element's shadow root (not <media-scorecard>); on this
+    // page that element is the <media-hero> custom element,
+    // which we can query directly (O(1)) instead of scanning
+    // every shadow root in the document.
     function findStickyRow() {
       // Cache the found host on window so we don't re-scan.
       const cached =
-        window.__rottenKetchup && window.__rottenKetchup.stickyHost;
-      if (cached && cached.isConnected) {
+        window.__rottenKetchup?.stickyHost;
+      if (cached?.isConnected) {
         try {
-          const root = cached.shadowRoot;
-          if (root) {
-            const row = root.querySelector(".collapsed-scores-row");
-            if (row) return row;
-          }
-        } catch (_) {
-          /* host removed, fall through */
+          const row = findInShadow(cached.shadowRoot, SHADOW_SELECTORS.collapsedRow);
+          if (row) return row;
+        } catch (e) {
+          debug("cached sticky host shadow probe failed", e);
         }
       }
-      // Scan the document for any element with an open shadow
-      // root that contains .collapsed-scores-row.
+      // Fast path: <media-hero> is a registered custom element,
+      // so document.querySelector reaches it directly.
+      const hero = document.querySelector("media-hero");
+      if (hero?.shadowRoot) {
+        try {
+          const row = findInShadow(hero.shadowRoot, SHADOW_SELECTORS.collapsedRow);
+          if (row) {
+            window.__rottenKetchup = window.__rottenKetchup || {};
+            window.__rottenKetchup.stickyHost = hero;
+            return row;
+          }
+        } catch (e) {
+          debug("media-hero shadow probe failed", e);
+        }
+      }
+      // Last-resort fallback: scan every element's shadow
+      // root. Only runs when <media-hero> isn't on the page
+      // (older RT markup). 674 shadow roots on the current
+      // page, so this is the slow path. The downstream
+      // findInShadow() calls already log hit/miss for each
+      // candidate, so no separate debug() line is needed
+      // here.
       const all = document.querySelectorAll("*");
       for (let i = 0; i < all.length; i++) {
         const el = all[i];
-        if (!el || !el.shadowRoot) continue;
+        if (!el?.shadowRoot) continue;
         try {
-          const row = el.shadowRoot.querySelector(".collapsed-scores-row");
+          const row = findInShadow(el.shadowRoot, SHADOW_SELECTORS.collapsedRow);
           if (row) {
             window.__rottenKetchup = window.__rottenKetchup || {};
             window.__rottenKetchup.stickyHost = el;
             return row;
           }
-        } catch (_) {
+        } catch (_e) {
           /* closed shadow, skip */
         }
       }
@@ -526,7 +561,7 @@
 
     function injectStickyColumn() {
       // Idempotency: don't inject twice.
-      if (window.__rottenKetchup && window.__rottenKetchup.stickyBadge) {
+      if (window.__rottenKetchup?.stickyBadge) {
         return true;
       }
       const stickyRow = findStickyRow();
@@ -536,10 +571,10 @@
       window.__rottenKetchup = window.__rottenKetchup || {};
       window.__rottenKetchup.stickyBadge = stickyCol;
       const cur = window.__rottenKetchup;
-      if (cur && cur.ok) {
-        applyDataToBadge(stickyCol, cur.pull, cur.counts, cur.data);
+      if (cur?.ok) {
+        applyDataToBadge(stickyCol, cur.pull, cur.counts);
       } else {
-        applyDataToBadge(stickyCol, null, null, null);
+        applyDataToBadge(stickyCol, null, null);
       }
       return true;
     }
@@ -547,8 +582,8 @@
     let stickyInjected = false;
     try {
       stickyInjected = injectStickyColumn();
-    } catch (_) {
-      /* scan failed, skip */
+    } catch (e) {
+      debug("injectStickyColumn threw", e);
     }
 
     // .media-hero.collapsed is only present in the DOM after
@@ -567,8 +602,8 @@
         window.__rottenKetchup = window.__rottenKetchup || {};
         window.__rottenKetchup.stickyObserver = stickyObs;
         setTimeout(() => stickyObs.disconnect(), 60000);
-      } catch (_) {
-        /* observer setup failed, ignore */
+      } catch (e) {
+        debug("sticky observer setup failed", e);
       }
     }
 
@@ -592,20 +627,20 @@
       // DOM) if it's still attached. The old shadow root may
       // be gone with the old scorecard, so guard against that.
       const oldBadge = window.__rottenKetchup.badge;
-      if (oldBadge && oldBadge.parentNode) {
+      if (oldBadge?.parentNode) {
         try {
           oldBadge.parentNode.removeChild(oldBadge);
-        } catch (_) {
-          /* parent gone (old scorecard torn down), fine */
+        } catch (e) {
+          debug("old badge detach failed", e);
         }
       }
       // Same for the sticky/collapsed hero column.
       const oldSticky = window.__rottenKetchup.stickyBadge;
-      if (oldSticky && oldSticky.parentNode) {
+      if (oldSticky?.parentNode) {
         try {
           oldSticky.parentNode.removeChild(oldSticky);
-        } catch (_) {
-          /* parent gone, fine */
+        } catch (e) {
+          debug("old sticky detach failed", e);
         }
       }
       // Disconnect the sticky-row observer so it doesn't fire
@@ -614,8 +649,8 @@
       if (oldStickyObs) {
         try {
           oldStickyObs.disconnect();
-        } catch (_) {
-          /* already gone, fine */
+        } catch (e) {
+          debug("sticky observer disconnect failed", e);
         }
       }
     }
@@ -626,21 +661,21 @@
     try {
       document
         .querySelectorAll(
-          SCORECARD + "[data-rk-scored], " + SCORECARD + "[data-rk-injected]",
+          `${SCORECARD}[data-rk-scored], ${SCORECARD}[data-rk-injected]`,
         )
         .forEach((el) => {
           el.removeAttribute("data-rk-scored");
           el.removeAttribute("data-rk-injected");
         });
-    } catch (_) {
-      /* document torn down, ignore */
+    } catch (e) {
+      debug("marker cleanup failed", e);
     }
   }
 
   function startScorecardObserver() {
     if (
       document.querySelector(SCORECARD) ||
-      (window.__rottenKetchup && window.__rottenKetchup.badge)
+      (window.__rottenKetchup?.badge)
     ) {
       return;
     }
@@ -680,16 +715,28 @@
   }
 
   // Patch history.pushState / replaceState so the same code
-  // path runs for SPA navigations.
+  // path runs for SPA navigations. The MARK symbol guards
+  // against re-wrapping if the script runs twice (or another
+  // extension wraps the same methods first), which would
+  // double-fire scanCycle on every navigation.
   (function patchHistory() {
-    const wrap = (orig) =>
-      function patched() {
-        const result = orig.apply(this, arguments);
+    const MARK = Symbol.for("rottenKetchup.patched");
+    const wrap = (orig) => {
+      if (orig?.[MARK]) return orig;
+      const patched = function patched(...args) {
+        const result = orig.apply(this, args);
         // Defer until after the URL has actually changed and
         // the new DOM is in flight.
         setTimeout(scanCycle, 0);
         return result;
       };
+      try {
+        Object.defineProperty(patched, MARK, { value: true });
+      } catch (e) {
+        debug("could not mark patched history fn", e);
+      }
+      return patched;
+    };
     history.pushState = wrap(history.pushState);
     history.replaceState = wrap(history.replaceState);
     window.addEventListener("popstate", scanCycle);

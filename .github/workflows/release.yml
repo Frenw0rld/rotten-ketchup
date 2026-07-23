@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags: ['*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 1 }
+
+      - name: Verify tag matches manifest version
+        run: |
+          set -euo pipefail
+          manifest_version=$(jq -r .version manifest.json)
+          tag_version="${GITHUB_REF_NAME}"
+          if [ "$manifest_version" != "$tag_version" ]; then
+            echo "Tag $tag_version does not match manifest.json version $manifest_version"
+            exit 1
+          fi
+          echo "Tag $tag_version matches manifest.json version $manifest_version"
+
+      - name: Build installable zip
+        run: zip -r "rotten-ketchup-${GITHUB_REF_NAME}.zip" manifest.json src icons README.md LICENSE
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: rotten-ketchup-${{ github.ref_name }}.zip
+          body: |
+            Rotten Ketchup ${{ github.ref_name }}
+
+            Install:
+            - Firefox: see README.md "Firefox" section (AMO listing preferred).
+            - Chrome/Edge/Brave: download `rotten-ketchup-${{ github.ref_name }}.zip`, unzip, then follow README.md "Chrome, Brave, Edge and other Chromium-based browsers" (Load unpacked).
+          generate_release_notes: true
