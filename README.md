@@ -1,12 +1,12 @@
 # Rotten Ketchup
 
-A browser extension that adds a **Censored** ("Pull") score next to the Popcornmeter on Rotten Tomatoes movie pages, so the verified-ticket "push" bias behind the displayed score becomes visible.
+A browser extension that adds a **Censored** score next to the Popcornmeter on Rotten Tomatoes movie pages, so the verified-ticket "push" bias behind the displayed score becomes visible.
 
 As u/RoryTate discovered [here](https://www.reddit.com/r/KotakuInAction/comments/1v1ow9s/rotten_tomatoes_says_the_odyssey_has_a_97/), Rotten Tomatoes' Popcornmeter is sold as the audience score, but most of it is made up of "verified" ticket-buying votes that the site heavily weights and labels prominently. Rotten Ketchup adds a third column to the movie scorecard: The Censored score, computed from the unverified (non-ticket) votes that RT's verified-ticket scoring suppresses.
 
 ## Install
 
-Rotten Ketchup is not listed on the Chrome Web Store. It is available for Firefox via the official Firefox Add-ons (AMO) page; for Chrome, Edge, Brave, and other Chromium-based browsers you can install it manually. Instructions for both are below.
+Rotten Ketchup is not yet listed on the Chrome Web Store. It is available for Firefox via the official Firefox Add-ons (AMO) page after their review is completed; for Chrome, Brave, Edge and other Chromium-based browsers you can install it manually. Instructions for both are below.
 
 ### Firefox
 
@@ -23,7 +23,7 @@ If the AMO listing is unavailable, you can install it manually as a temporary ad
 These browsers do not have a store listing for Rotten Ketchup, so the extension is installed by loading the unpacked folder directly. You only need to do this once; the extension stays installed until you remove it.
 
 1. **Download the extension files.**
-   - On the GitHub page for this repository, click the green **Code** button, then **Download ZIP**.
+   - Download the zip file under **Releases** on the right, alternatively click the green **Code** button on top of the page, then on **Download ZIP**.
    - Save the ZIP anywhere on your computer (your Downloads folder is fine) and unzip it. You should now have a folder called `rotten-ketchup-master` (or similar) that contains a file named `manifest.json`. **Remember where this folder is located**, you will need to pick it in step 4.
 
 2. **Open the extensions page in your browser.**
@@ -46,7 +46,7 @@ These browsers do not have a store listing for Rotten Ketchup, so the extension 
 
 - When a new version of the extension is released, download the new release ZIP from the GitHub page and unzip it.
 - Open the new folder, select all of its contents (`manifest.json`, `src/`, etc.), and copy them into your existing extension folder, overwriting the old files.
-- Then go to `chrome://extensions`, click the **Reload** button on the Rotten Ketchup card.
+- Then go to `chrome://extensions`, click the **Reload** button on the Rotten Ketchup card, the version number will adjust accordingly.
 
 **To uninstall:** go to `chrome://extensions`, click **Remove** on the Rotten Ketchup card, and confirm.
 
@@ -54,7 +54,7 @@ These browsers do not have a store listing for Rotten Ketchup, so the extension 
 
 Use this only if the AMO listing is unavailable. This loads the extension as a temporary add-on that Firefox will remove when it restarts.
 
-1. Download and unzip this repository (same as step 1 above).
+1. Download and unzip the files (same as in step 1 & 2 above).
 2. Open `about:debugging#/runtime/this-firefox` in Firefox.
 3. Click **Load Temporary Add-on…** and select the `manifest.json` file from inside the unzipped folder.
 4. Open a Rotten Tomatoes movie page. The third column should appear.
@@ -71,7 +71,7 @@ On any RT movie page, the scorecard now has three columns in its top row:
 2. **Popcornmeter** (verified-audience)
 3. **Censored** (this extension, computed from unverified votes)
 
-If a movie has no unverified votes yet, the third column shows `—` / `No independent votes yet` in muted text.
+If a movie has no unverified votes yet, the third column shows `—` / `No independent votes yet`.
 
 ## Privacy
 
