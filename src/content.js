@@ -173,9 +173,23 @@
 
   function runParser() {
     const data = parseScorecardJson();
+    // Preserve the badge references stashed by place() so we
+    // can refresh them after the window.__rottenKetchup
+    // reassignment below. The badge lives inside the
+    // scorecard's shadow root, so a light-DOM querySelector
+    // can't find it. (Not dead code: dropping this caused the
+    // badge to stay on its loading placeholder because the
+    // parser would clobber the badge ref each run.)
+    const prevBadge = window.__rottenKetchup?.badge || null;
+    const prevSticky = window.__rottenKetchup?.stickyBadge || null;
     if (!data) {
       console.warn(`[RottenKetchup] #${JSON_ID} not found or empty`);
-      window.__rottenKetchup = { ok: false, reason: "no-json" };
+      window.__rottenKetchup = {
+        ok: false,
+        reason: "no-json",
+        badge: prevBadge,
+        stickyBadge: prevSticky,
+      };
       return;
     }
     const counts = readAudienceCounts(data);
@@ -185,23 +199,31 @@
           "available keys:",
         Object.keys(data),
       );
-      window.__rottenKetchup = { ok: false, reason: "no-counts" };
+      window.__rottenKetchup = {
+        ok: false,
+        reason: "no-counts",
+        badge: prevBadge,
+        stickyBadge: prevSticky,
+      };
       return;
     }
     const pull = computePull(counts);
-    window.__rottenKetchup = { ok: true, data, counts, pull };
+    window.__rottenKetchup = {
+      ok: true,
+      data,
+      counts,
+      pull,
+      badge: prevBadge,
+      stickyBadge: prevSticky,
+    };
     debug("parser ok", {
       pullPct: pull.pullPct,
       unverifiedTotal: pull.unverifiedTotal,
     });
 
     // Refresh the badge in place if it was already injected.
-    // The badge lives inside the scorecard's shadow root, so
-    // a light-DOM querySelector can't find it; the references
-    // are stashed on window.__rottenKetchup by place() instead.
-    const live = window.__rottenKetchup;
-    if (live?.badge) applyDataToBadge(live.badge, pull, counts);
-    if (live?.stickyBadge) applyDataToBadge(live.stickyBadge, pull, counts);
+    if (prevBadge) applyDataToBadge(prevBadge, pull, counts);
+    if (prevSticky) applyDataToBadge(prevSticky, pull, counts);
   }
 
   // ---- Badge injection ----
